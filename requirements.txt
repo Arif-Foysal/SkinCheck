@@ -1,6 +1,8 @@
 fastapi
 uvicorn
 python-multipart
-pydantic
+pydantic[email]
 email-validator
 supabase
+python-dotenv
+passlib
