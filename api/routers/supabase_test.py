@@ -1,8 +1,8 @@
-from api.supabase_client import supabase
-from fastapi import HTTPException, status, APIRouter
+from api.supabase import supabase
+from fastapi import Depends, HTTPException, status, APIRouter
 from typing import List
 from api import schemas
-
+from .auth import get_current_user
 
 router = APIRouter(
     tags=["CRUD TEST"],
@@ -10,11 +10,11 @@ router = APIRouter(
 )
 
 @router.get("/" , status_code=status.HTTP_200_OK)
-async def get_items():
+async def get_items(current_user: dict = Depends(get_current_user)):
     """Get all items"""
     try:
         response = supabase.table("items").select("*").execute()
-        return response.data or []
+        return response.data
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
