@@ -6,3 +6,5 @@ email-validator
 supabase
 python-dotenv
 passlib
+pillow
+PyJWT
