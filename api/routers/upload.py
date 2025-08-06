@@ -173,7 +173,7 @@ async def upload_file(
     response = supabase.table("uploads").insert({
         "file_name": sanitized_filename,
         "file_hash": file_hash,
-        "user_id": 1,  # Assuming user_id is obtained from the current user context
+        "user_uuid": current_user.get("sub"),  # Assuming user_id is obtained from the current user context
         "localization": prediction_request.localization,
         "url": upload_response.fullPath,
     }).execute()

@@ -30,7 +30,7 @@ async def log_requests(request: Request, call_next):
     ip = request.client.host
     auth_header = request.headers.get("authorization", "")
     email = "anonymous"
-    user_id = None
+    user_uuid = None
 
     if auth_header.startswith("Bearer "):
         try:
@@ -43,13 +43,13 @@ async def log_requests(request: Request, call_next):
             
             # Use the auth router's get_current_user function
             user_data = get_current_user(credentials)
-            user_id = user_data.get("sub")
+            user_uuid = user_data.get("sub")
             email = user_data.get("email", "no_email")
             
         except Exception as e:
             # If authentication fails, keep defaults
             email = "auth_failed"
-            user_id = None
+            user_uuid = None
     
     response = await call_next(request)
     logger.info(f"Response: {response.status_code} for {request.method} {request.url.path}")
@@ -59,7 +59,7 @@ async def log_requests(request: Request, call_next):
         supabase.table("logs").insert({
             "method": request.method,
             "path": request.url.path,
-            "user_id": user_id,
+            "user_uuid": user_uuid,
             "ip": ip,
             "status_code": response.status_code,
         }).execute()
