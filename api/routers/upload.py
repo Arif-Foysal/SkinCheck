@@ -128,15 +128,28 @@ def calculate_file_hash(content: bytes) -> str:
 
 @router.post("/")
 async def upload_file(
-    image: UploadFile = File(None),
+    image: UploadFile = File(...),  # Required field
     current_user: dict = Depends(get_current_user),
     prediction_request: PredictionRequest = Depends()
 ):
     """Upload an image file to Supabase storage"""
-    if not image or not image.filename:
+    # Production-level validation for file upload
+    if not image:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No file uploaded"
+            detail="No file provided"
+        )
+    
+    if not image.filename or image.filename.strip() == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file: filename is empty"
+        )
+    
+    if not image.size or image.size == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file: file is empty"
         )
     
     # Validate file size
@@ -195,3 +208,24 @@ async def upload_file(
         "response": response.data[0],
         "url": live_url
     }
+
+@router.get("/history", status_code=status.HTTP_200_OK)
+async def get_upload_history(current_user: dict = Depends(get_current_user)):
+    """Get upload history for the current user"""
+    user_uuid = current_user.get("sub")
+    if not user_uuid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not authenticated"
+        )
+    
+    try:
+        response = supabase.table("uploads").select("*").eq("user_uuid", user_uuid).execute()
+        if not response.data:
+            return {"message": "No uploads found for this user"}
+        return response.data
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving upload history: {str(e)}"
+        )
