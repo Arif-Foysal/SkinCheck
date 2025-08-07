@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from .routers import auth, upload, predict, signup, supabase_test, user
+from .routers import auth, upload, signup, supabase_test, user
 from .middlewares.auth import auth_middleware
 from .middlewares.logger import log_requests
 
@@ -38,7 +38,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                         "code": "MISSING_FILE"
                     }
                 )
-    
+
     # Generic validation error
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -79,10 +79,10 @@ app.middleware("http")(auth_middleware)
 # Include routers
 app.include_router(auth.router)
 app.include_router(upload.router)
-app.include_router(predict.router)
 app.include_router(signup.router)
 app.include_router(supabase_test.router)
 app.include_router(user.router)
+
 
 @app.get("/")
 async def root():

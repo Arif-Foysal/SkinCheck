@@ -1,19 +1,25 @@
 import os
+import warnings
 import hashlib
 from typing import List, Optional
 from datetime import datetime
 from ..schemas import PredictionRequest
 from fastapi import APIRouter, HTTPException, UploadFile, status, File, Depends
+from fastapi.responses import JSONResponse
 from PIL import Image
 import io
 import uuid
 from .auth import get_current_user
 from ..schemas import FileUploadResponse, FileValidationError
 from ..supabase import supabase
+import torch
+from torchvision import transforms
+from transformers import ViTForImageClassification
+import io
 
 router = APIRouter(
     tags=["Upload and Predict"],
-    prefix="/upload"
+    prefix="/predict"
 )
 
 
@@ -29,6 +35,68 @@ ALLOWED_IMAGE_TYPES = {
 ALLOWED_EXTENSIONS = [ext for extensions in ALLOWED_IMAGE_TYPES.values() for ext in extensions]
 
 base_url = os.environ.get("IMAGE_BASE_URL")
+
+# Suppress warnings for deprecated features
+warnings.filterwarnings("ignore")
+
+# pretrained model
+MODEL_PATH = os.environ.get("MODEL_PATH", "../vit_checkpoint.pth")
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+class SkinCancerPredictor:
+    def __init__(self, model_path, device='cpu'):
+        self.device = device
+        self.model = self._load_model(model_path)
+        self.transform = self._get_transform()
+        self.binary_class_names = {0: "Benign", 1: "Malignant"}
+        self.benign_indices = [0, 3, 4, 6]
+        self.malignant_indices = [1, 2, 5]
+
+    def _load_model(self, model_path):
+        model = ViTForImageClassification.from_pretrained(
+            'google/vit-base-patch16-224-in21k',
+            num_labels=7,
+            ignore_mismatched_sizes=True
+        )
+        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        model.to(self.device)
+        model.eval()
+        return model
+
+    def _get_transform(self):
+        return transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+    def predict(self, image: Image.Image):
+        input_tensor = self.transform(image).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            outputs = self.model(input_tensor)
+            probabilities_7_class = torch.softmax(outputs.logits, dim=1).squeeze(0)
+        prob_benign = probabilities_7_class[self.benign_indices].sum().item()
+        prob_malignant = probabilities_7_class[self.malignant_indices].sum().item()
+        total_prob = prob_benign + prob_malignant
+        if total_prob > 0:
+            prob_benign /= total_prob
+            prob_malignant /= total_prob
+        predicted_index = 0 if prob_benign > prob_malignant else 1
+        predicted_class = self.binary_class_names[predicted_index]
+        confidence = max(prob_benign, prob_malignant)
+        return {
+            "prediction": predicted_class,
+            "confidence": round(confidence, 4),
+            "probabilities": {
+            "Benign": round(prob_benign, 4),
+            "Malignant": round(prob_malignant, 4)
+            }
+        }
+
+# Load model at startup
+predictor = SkinCancerPredictor(model_path=MODEL_PATH, device=DEVICE)
+
 
 
 class ImageValidator:
@@ -163,10 +231,13 @@ async def upload_file(
     
     # Read file content
     file_content = await image.read()
-    
+
     # Validate image content
     await ImageValidator.validate_image_content(file_content)
-    
+    image_rgb = Image.open(io.BytesIO(file_content)).convert('RGB')
+
+    # Predict skin cancer using the loaded model
+    prediction_result = predictor.predict(image_rgb)
     # Sanitize and validate filename
     sanitized_filename = ImageValidator.validate_filename(image.filename)
     # Create a unique filename to avoid collisions
@@ -192,6 +263,8 @@ async def upload_file(
         "user_uuid": current_user.get("sub"),  # Assuming user_id is obtained from the current user context
         "localization": prediction_request.localization,
         "url": upload_response.fullPath,
+        "prediction_result": prediction_result.get("prediction"),
+        "prediction_confidence": prediction_result.get("confidence"),
     }).execute()
     if not response.data:
         raise HTTPException(
@@ -207,10 +280,11 @@ async def upload_file(
     # Return the file upload response
     live_url = f"{base_url}/{response.data[0]['url']}"
 
-    return {
-        "response": response.data[0],
-        "url": live_url
-    }
+    return JSONResponse(content=prediction_result,status_code=status.HTTP_201_CREATED, headers={
+        "X-File-Name": sanitized_filename,
+        "X-File-Hash": file_hash,
+        "X-File-URL": live_url
+    })
 
 @router.get("/history", status_code=status.HTTP_200_OK)
 async def get_upload_history(current_user: dict = Depends(get_current_user)):
