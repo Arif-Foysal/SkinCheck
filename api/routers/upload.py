@@ -28,6 +28,9 @@ ALLOWED_IMAGE_TYPES = {
 }
 ALLOWED_EXTENSIONS = [ext for extensions in ALLOWED_IMAGE_TYPES.values() for ext in extensions]
 
+base_url = os.environ.get("IMAGE_BASE_URL")
+
+
 class ImageValidator:
     """Comprehensive image validation class"""
     
@@ -195,7 +198,7 @@ async def upload_file(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save file metadata in database"
         )
-    base_url = os.environ.get("IMAGE_BASE_URL")
+
     if not base_url:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -223,7 +226,10 @@ async def get_upload_history(current_user: dict = Depends(get_current_user)):
         response = supabase.table("uploads").select("*").eq("user_uuid", user_uuid).execute()
         if not response.data:
             return {"message": "No uploads found for this user"}
-        return response.data
+        user_uploads = response.data
+        for upload in user_uploads:
+            upload['url'] = f"{base_url}/{upload['url']}" if base_url else upload['url']
+        return {"uploads": user_uploads}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
