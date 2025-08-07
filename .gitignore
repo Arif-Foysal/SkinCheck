@@ -15,8 +15,8 @@ ENV/
 .venv/
 
 #models
-*.pth
-*.pkl
+# *.pth
+# *.pkl
 
 # IDEs
 .vscode/
