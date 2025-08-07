@@ -1,4 +1,5 @@
 import os
+import requests
 import warnings
 import hashlib
 from typing import List, Optional
@@ -16,6 +17,7 @@ import torch
 from torchvision import transforms
 from transformers import ViTForImageClassification
 import io
+from huggingface_hub import hf_hub_download
 
 router = APIRouter(
     tags=["Upload and Predict"],
@@ -40,7 +42,9 @@ base_url = os.environ.get("IMAGE_BASE_URL")
 warnings.filterwarnings("ignore")
 
 # pretrained model
-MODEL_PATH = os.environ.get("MODEL_PATH", "../vit_checkpoint.pth")
+# MODEL_URL = os.environ.get("MODEL_URL")
+# MODEL_PATH = os.environ.get("MODEL_PATH")
+MODEL_PATH = hf_hub_download(repo_id="Arif194/SkinCheck", filename="vit_checkpoint.pth")
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
