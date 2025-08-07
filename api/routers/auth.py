@@ -129,9 +129,16 @@ async def authenticate_user(response: Response, email: str, password: str):
 
 @router.get("/logout")
 async def logout(response: Response):
-    response = RedirectResponse("/login", status_code=303)
-    response.delete_cookie(key="access_token")
-    return response
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax"
+    )
+    return {
+        "status": "success",
+        "message": "Logged out successfully"
+    }
 
 @router.get("/profile")
 async def get_user_profile(current_user: dict = Depends(get_current_user)):
